@@ -34,7 +34,7 @@ export const AppBar = (props: { left?: JSX.Element; right?: JSX.Element }) => {
           </Menu.Item>
           <Menu.Item key="trade">
             <a
-              href={"https://cryptostarkwolf.github.io/serum-dex-ui/"}
+              href={"https://serum-dex.cryptostarkwolf.com/"}
               target="_blank"
               rel="noopener noreferrer"
             >
