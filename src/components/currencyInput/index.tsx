@@ -10,6 +10,7 @@ import {
 import { useUserAccounts, useMint, useCachedPool } from "../../utils/accounts";
 import "./styles.less";
 import { useConnectionConfig } from "../../utils/connection";
+import { useCurrencyPairState } from "../../utils/currencyPair";
 import { PoolIcon, TokenIcon } from "../tokenIcon";
 import PopularTokens from "../../utils/token-list.json";
 import { PublicKey } from "@solana/web3.js";
@@ -29,6 +30,7 @@ export const CurrencyInput = (props: {
   const mint = useMint(props.mint);
 
   const { env } = useConnectionConfig();
+  const { setPoolOperation } = useCurrencyPairState();
 
   const tokens = PopularTokens[env] as KnownToken[];
 
@@ -37,6 +39,7 @@ export const CurrencyInput = (props: {
       <Option
         key={item.mintAddress}
         value={item.mintAddress}
+        name={item.tokenSymbol}
         title={item.mintAddress}
       >
         <div
@@ -102,6 +105,7 @@ export const CurrencyInput = (props: {
         <Option
           key={account.account.pubkey.toBase58()}
           value={mint}
+          name={name}
           title={mint}
         >
           <div key={mint} style={{ display: "flex", alignItems: "center" }}>
@@ -164,16 +168,18 @@ export const CurrencyInput = (props: {
         <div className="ccy-input-header-right" style={{ display: "felx" }}>
           <Select
             size="large"
-            style={{ minWidth: 80 }}
+            showSearch
+            style={{ minWidth: 120 }}
             placeholder="CCY"
             value={props.mint}
-            dropdownMatchSelectWidth={true}
-            dropdownStyle={{ minWidth: 200 }}
             onChange={(item) => {
               if (props.onMintChange) {
                 props.onMintChange(item);
               }
             }}
+            filterOption={(input, option) =>
+              option?.name?.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }
           >
             {[...renderPopularTokens, ...renderAdditionalTokens]}
           </Select>

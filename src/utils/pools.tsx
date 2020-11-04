@@ -170,7 +170,7 @@ export const swap = async (
   const minAmountOut = components[1].amount * (1 - SLIPPAGE);
   const holdingA =
     pool.pubkeys.holdingMints[0]?.toBase58() ===
-      components[0].account.info.mint.toBase58()
+    components[0].account.info.mint.toBase58()
       ? pool.pubkeys.holdingAccounts[0]
       : pool.pubkeys.holdingAccounts[1];
   const holdingB =
@@ -225,14 +225,14 @@ export const swap = async (
 
   let hostFeeAccount = SWAP_HOST_FEE_ADDRESS
     ? findOrCreateAccountByMint(
-      wallet.publicKey,
-      SWAP_HOST_FEE_ADDRESS,
-      instructions,
-      cleanupInstructions,
-      accountRentExempt,
-      pool.pubkeys.mint,
-      signers
-    )
+        wallet.publicKey,
+        SWAP_HOST_FEE_ADDRESS,
+        instructions,
+        cleanupInstructions,
+        accountRentExempt,
+        pool.pubkeys.mint,
+        signers
+      )
     : undefined;
 
   // swap
@@ -331,7 +331,7 @@ export const usePools = () => {
             data: undefined as any,
             account: item.account,
             pubkey: item.pubkey,
-            init: async () => { },
+            init: async () => {},
           };
 
           // handling of legacy layout can be removed soon...
@@ -726,12 +726,44 @@ function findOrCreateAccountByMint(
   return toAccount;
 }
 
+function estimateProceedsFromInput(
+  inputQuantityInPool: number,
+  proceedsQuantityInPool: number,
+  inputAmount: number
+): number {
+  return (
+    (proceedsQuantityInPool * inputAmount) / (inputQuantityInPool + inputAmount)
+  );
+}
+
+function estimateInputFromProceeds(
+  inputQuantityInPool: number,
+  proceedsQuantityInPool: number,
+  proceedsAmount: number
+): number | string {
+  if (proceedsAmount >= proceedsQuantityInPool) {
+    return "Not possible";
+  }
+
+  return (
+    (inputQuantityInPool * proceedsAmount) /
+    (proceedsQuantityInPool - proceedsAmount)
+  );
+}
+
+export enum PoolOperation {
+  Add,
+  SwapGivenInput,
+  SwapGivenProceeds,
+}
+
 export async function calculateDependentAmount(
   connection: Connection,
   independent: string,
   amount: number,
-  pool: PoolInfo
-): Promise<number | undefined> {
+  pool: PoolInfo,
+  op: PoolOperation
+): Promise<number | string | undefined> {
   const poolMint = await cache.queryMint(connection, pool.pubkeys.mint);
   const accountA = await cache.queryAccount(
     connection,
@@ -765,15 +797,51 @@ export async function calculateDependentAmount(
     10,
     isFirstIndependent ? mintA.decimals : mintB.decimals
   );
-  const adjAmount = amount * indPrecision;
+  const indAdjustedAmount = amount * indPrecision;
 
-  const dependentTokenAmount = isFirstIndependent
-    ? (accountB.info.amount.toNumber() / accountA.info.amount.toNumber()) *
-    adjAmount
-    : (accountA.info.amount.toNumber() / accountB.info.amount.toNumber()) *
-    adjAmount;
+  let indBasketQuantity = (isFirstIndependent
+    ? accountA
+    : accountB
+  ).info.amount.toNumber();
+  let depBasketQuantity = (isFirstIndependent
+    ? accountB
+    : accountA
+  ).info.amount.toNumber();
 
-  return dependentTokenAmount / depPrecision;
+  var depAdjustedAmount;
+  switch (+op) {
+    case PoolOperation.Add:
+      {
+        depAdjustedAmount =
+          (depBasketQuantity / indBasketQuantity) * indAdjustedAmount;
+      }
+      break;
+    case PoolOperation.SwapGivenProceeds:
+      {
+        depAdjustedAmount = estimateInputFromProceeds(
+          depBasketQuantity,
+          indBasketQuantity,
+          indAdjustedAmount
+        );
+      }
+      break;
+    case PoolOperation.SwapGivenInput:
+      {
+        depAdjustedAmount = estimateProceedsFromInput(
+          indBasketQuantity,
+          depBasketQuantity,
+          indAdjustedAmount
+        );
+      }
+      break;
+  }
+  if (typeof depAdjustedAmount === "string") {
+    return depAdjustedAmount;
+  }
+  if (depAdjustedAmount === undefined) {
+    return undefined;
+  }
+  return depAdjustedAmount / depPrecision;
 }
 
 // TODO: add ui to customize curve type
