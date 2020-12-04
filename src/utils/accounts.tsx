@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useConnection } from "./connection";
 import { useWallet } from "./wallet";
 import { AccountInfo, Connection, PublicKey } from "@solana/web3.js";
@@ -192,6 +192,11 @@ export const cache = {
     accountsCache.set(account.pubkey.toBase58(), account);
     return account;
   },
+  deleteAccount: (pubkey: PublicKey) => {
+    const id = pubkey?.toBase58();
+    accountsCache.delete(id);
+    accountEmitter.raiseAccountUpdated(id);
+  },
   getAccount: (pubKey: string | PublicKey) => {
     let key: string;
     if (typeof pubKey !== "string") {
@@ -321,6 +326,15 @@ const UseNativeAccount = () => {
     });
   }, [setNativeAccount, wallet, wallet.publicKey, connection]);
 
+  useEffect(() => {
+    const account = wrapNativeAccount(wallet.publicKey, nativeAccount);
+    if(!account) {
+      return;
+    }
+
+    accountsCache.set(account.pubkey.toBase58(), account);
+  }, [wallet.publicKey, nativeAccount]);
+
   return { nativeAccount };
 };
 
@@ -369,22 +383,22 @@ export function AccountsProvider({ children = null as any }) {
   const { nativeAccount } = UseNativeAccount();
   const { pools } = usePools();
 
+  const publicKey = wallet?.publicKey;
+
   const selectUserAccounts = useCallback(() => {
     return [...accountsCache.values()].filter(
-      (a) => a.info.owner.toBase58() === wallet.publicKey.toBase58()
+      (a) => a.info.owner.toBase58() === publicKey?.toBase58()
     );
-  }, [wallet]);
+  }, [publicKey]);
 
   useEffect(() => {
     setUserAccounts(
-      [
-        wrapNativeAccount(wallet.publicKey, nativeAccount),
-        ...tokenAccounts,
-      ].filter((a) => a !== undefined) as TokenAccount[]
+      [wrapNativeAccount(publicKey, nativeAccount), ...tokenAccounts].filter(
+        (a) => a !== undefined
+      ) as TokenAccount[]
     );
-  }, [nativeAccount, wallet, tokenAccounts]);
+  }, [nativeAccount, publicKey, tokenAccounts]);
 
-  const publicKey = wallet?.publicKey;
   useEffect(() => {
     if (!connection || !publicKey) {
       setTokenAccounts([]);
@@ -393,6 +407,10 @@ export function AccountsProvider({ children = null as any }) {
       precacheUserTokenAccounts(connection, SWAP_HOST_FEE_ADDRESS);
 
       precacheUserTokenAccounts(connection, publicKey).then(() => {
+        setTokenAccounts(selectUserAccounts());
+      });
+
+      const dispose = accountEmitter.onAccount(() => {
         setTokenAccounts(selectUserAccounts());
       });
 
@@ -420,7 +438,6 @@ export function AccountsProvider({ children = null as any }) {
               accountsCache.has(id)
             ) {
               accountsCache.set(id, details);
-              setTokenAccounts(selectUserAccounts());
               accountEmitter.raiseAccountUpdated(id);
             }
           } else if (info.accountInfo.data.length === MintLayout.span) {
@@ -428,7 +445,6 @@ export function AccountsProvider({ children = null as any }) {
               const data = Buffer.from(info.accountInfo.data);
               const mint = deserializeMint(data);
               mintCache.set(id, mint);
-              accountEmitter.raiseAccountUpdated(id);
             }
 
             accountEmitter.raiseAccountUpdated(id);
@@ -443,6 +459,7 @@ export function AccountsProvider({ children = null as any }) {
 
       return () => {
         connection.removeProgramAccountChangeListener(tokenSubID);
+        dispose();
       };
     }
   }, [connection, connected, publicKey, selectUserAccounts]);
@@ -481,14 +498,16 @@ export const getMultipleAccounts = async (
   const array = result
     .map(
       (a) =>
-        a.array.map((acc) => {
-          const { data, ...rest } = acc;
-          const obj = {
-            ...rest,
-            data: Buffer.from(data[0], "base64"),
-          } as AccountInfo<Buffer>;
-          return obj;
-        }) as AccountInfo<Buffer>[]
+        a.array
+          .filter((acc) => !!acc)
+          .map((acc) => {
+            const { data, ...rest } = acc;
+            const obj = {
+              ...rest,
+              data: Buffer.from(data[0], "base64"),
+            } as AccountInfo<Buffer>;
+            return obj;
+          }) as AccountInfo<Buffer>[]
     )
     .flat();
   return { keys, array };
@@ -601,10 +620,16 @@ export function useAccount(pubKey?: PublicKey) {
   return account;
 }
 
-export function useCachedPool() {
+export function useCachedPool(legacy = false) {
   const context = useContext(AccountsContext);
+
+  const allPools = context.pools as PoolInfo[];
+  const pools = useMemo(() => {
+    return allPools.filter(p => p.legacy === legacy);
+  }, [allPools, legacy]);
+
   return {
-    pools: context.pools as PoolInfo[],
+    pools,
   };
 }
 

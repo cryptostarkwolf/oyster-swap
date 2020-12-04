@@ -21,6 +21,7 @@ import { AccountInfo, Connection, PublicKey } from "@solana/web3.js";
 import { useMemo } from "react";
 import { PoolInfo } from "../models";
 import { EventEmitter } from "./../utils/eventEmitter";
+import { LIQUIDITY_PROVIDER_FEE, SERUM_FEE } from "../utils/pools";
 
 interface RecentPoolData {
   pool_identifier: string;
@@ -41,7 +42,7 @@ export interface MarketsContextState {
 const INITAL_LIQUIDITY_DATE = new Date("2020-10-27");
 const REFRESH_INTERVAL = 30_000;
 
-const BONFIDA_POOL_INTERVAL = 30 * 60_000; // 30 min
+export const BONFIDA_POOL_INTERVAL = 30 * 60_000; // 30 min
 
 const MarketsContext = React.createContext<MarketsContextState | null>(null);
 
@@ -404,7 +405,7 @@ function createEnrichedPools(
       let volume = 0;
       let volume24h =
         baseMid * (poolData?.get(p.pubkeys.mint.toBase58())?.volume24hA || 0);
-      let fees24h = volume24h * 0.0025;
+      let fees24h = volume24h * (LIQUIDITY_PROVIDER_FEE - SERUM_FEE);
       let fees = 0;
       let apy = airdropYield;
       let apy24h = airdropYield;
@@ -424,7 +425,7 @@ function createEnrichedPools(
           const poolOwnerFees =
             ownedPct * baseReserveUSD + ownedPct * quoteReserveUSD;
           volume = poolOwnerFees / 0.0004;
-          fees = volume * 0.003;
+          fees = volume * LIQUIDITY_PROVIDER_FEE;
 
           if (fees !== 0) {
             const baseVolume = (ownedPct * baseReserveUSD) / 0.0004;
@@ -437,17 +438,22 @@ function createEnrichedPools(
             );
             const apy0 =
               parseFloat(
-                ((baseVolume / daysSinceInception) * 0.003 * 356) as any
+                ((baseVolume / daysSinceInception) *
+                  LIQUIDITY_PROVIDER_FEE *
+                  356) as any
               ) / baseReserveUSD;
             const apy1 =
               parseFloat(
-                ((quoteVolume / daysSinceInception) * 0.003 * 356) as any
+                ((quoteVolume / daysSinceInception) *
+                  LIQUIDITY_PROVIDER_FEE *
+                  356) as any
               ) / quoteReserveUSD;
 
             apy = apy + Math.max(apy0, apy1);
 
             const apy24h0 =
-              parseFloat((volume24h * 0.003 * 356) as any) / baseReserveUSD;
+              parseFloat((volume24h * LIQUIDITY_PROVIDER_FEE * 356) as any) /
+              baseReserveUSD;
             apy24h = apy24h + apy24h0;
           }
         }
@@ -466,6 +472,7 @@ function createEnrichedPools(
         id: index,
         name,
         names: mints.map((m) => getTokenName(tokenMap, m)),
+        accounts: [accountA?.pubkey, accountB?.pubkey],
         address: p.pubkeys.mint.toBase58(),
         link,
         mints,

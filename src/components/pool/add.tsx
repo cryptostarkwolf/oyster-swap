@@ -12,7 +12,7 @@ import {
   useSlippageConfig,
 } from "../../utils/connection";
 import { Spin } from "antd";
-import { LoadingOutlined } from "@ant-design/icons";
+import { LoadingOutlined, SettingOutlined } from "@ant-design/icons";
 import { notify } from "../../utils/notifications";
 import { SupplyOverview } from "./supplyOverview";
 import { CurrencyInput } from "../currencyInput";
@@ -31,6 +31,8 @@ import { formatPriceNumber } from "../../utils/utils";
 import { useMint, useUserAccounts } from "../../utils/accounts";
 import { useEnrichedPools } from "../../context/market";
 import { PoolIcon } from "../tokenIcon";
+import { AppBar } from "../appBar";
+import { Settings } from "../settings";
 
 const antIcon = <LoadingOutlined style={{ fontSize: 24 }} spin />;
 
@@ -60,37 +62,37 @@ export const AddToLiquidity = () => {
   const executeAction = !connected
     ? wallet.connect
     : async () => {
-        if (A.account && B.account && A.mint && B.mint) {
-          setPendingTx(true);
-          const components = [
-            {
-              account: A.account,
-              mintAddress: A.mintAddress,
-              amount: A.convertAmount(),
-            },
-            {
-              account: B.account,
-              mintAddress: B.mintAddress,
-              amount: B.convertAmount(),
-            },
-          ];
+      if (A.account && B.account && A.mint && B.mint) {
+        setPendingTx(true);
+        const components = [
+          {
+            account: A.account,
+            mintAddress: A.mintAddress,
+            amount: A.convertAmount(),
+          },
+          {
+            account: B.account,
+            mintAddress: B.mintAddress,
+            amount: B.convertAmount(),
+          },
+        ];
 
-          addLiquidity(connection, wallet, components, slippage, pool, options)
-            .then(() => {
-              setPendingTx(false);
-            })
-            .catch((e) => {
-              console.log("Transaction failed", e);
-              notify({
-                description:
-                  "Please try again and approve transactions from your wallet",
-                message: "Adding liquidity cancelled.",
-                type: "error",
-              });
-              setPendingTx(false);
+        addLiquidity(connection, wallet, components, slippage, pool, options)
+          .then(() => {
+            setPendingTx(false);
+          })
+          .catch((e) => {
+            console.log("Transaction failed", e);
+            notify({
+              description:
+                "Please try again and approve transactions from your wallet",
+              message: "Adding liquidity cancelled.",
+              type: "error",
             });
-        }
-      };
+            setPendingTx(false);
+          });
+      }
+    };
 
   const hasSufficientBalance = A.sufficientBalance() && B.sufficientBalance();
 
@@ -109,26 +111,26 @@ export const AddToLiquidity = () => {
       {pendingTx && <Spin indicator={antIcon} className="add-spinner" />}
     </Button>
   ) : (
-    <Dropdown.Button
-      className="add-button"
-      onClick={executeAction}
-      disabled={
-        connected &&
-        (pendingTx || !A.account || !B.account || A.account === B.account)
-      }
-      type="primary"
-      size="large"
-      overlay={<PoolConfigCard options={options} setOptions={setOptions} />}
-    >
-      {generateActionLabel(CREATE_POOL_LABEL, connected, tokenMap, A, B)}
-      {pendingTx && <Spin indicator={antIcon} className="add-spinner" />}
-    </Dropdown.Button>
-  );
+      <Dropdown.Button
+        className="add-button"
+        onClick={executeAction}
+        disabled={
+          connected &&
+          (pendingTx || !A.account || !B.account || A.account === B.account)
+        }
+        type="primary"
+        size="large"
+        overlay={<PoolConfigCard options={options} setOptions={setOptions} />}
+      >
+        {generateActionLabel(CREATE_POOL_LABEL, connected, tokenMap, A, B)}
+        {pendingTx && <Spin indicator={antIcon} className="add-spinner" />}
+      </Dropdown.Button>
+    );
 
   return (
     <>
       <div className="input-card">
-        <AdressesPopover pool={pool} aName={A.name} bName={B.name} />
+        <AdressesPopover pool={pool} />
         <Popover
           trigger="hover"
           content={
@@ -174,29 +176,30 @@ export const AddToLiquidity = () => {
             B.setMint(item);
           }}
         />
+        {pool && (
+          <Button
+            className="add-button"
+            type="primary"
+            size="large"
+            onClick={executeAction}
+            disabled={
+              connected &&
+              (pendingTx ||
+                !A.account ||
+                !B.account ||
+                A.account === B.account ||
+                !hasSufficientBalance)
+            }
+          >
+            {generateActionLabel(ADD_LIQUIDITY_LABEL, connected, tokenMap, A, B)}
+            {pendingTx && <Spin indicator={antIcon} className="add-spinner" />}
+          </Button>
+        )}
+        {!pool && createPoolButton}
         {pool && <PoolPrice pool={pool} />}
         <SupplyOverview pool={pool} />
       </div>
-      {pool && (
-        <Button
-          className="add-button"
-          type="primary"
-          size="large"
-          onClick={executeAction}
-          disabled={
-            connected &&
-            (pendingTx ||
-              !A.account ||
-              !B.account ||
-              A.account === B.account ||
-              !hasSufficientBalance)
-          }
-        >
-          {generateActionLabel(ADD_LIQUIDITY_LABEL, connected, tokenMap, A, B)}
-          {pendingTx && <Spin indicator={antIcon} className="add-spinner" />}
-        </Button>
-      )}
-      {!pool && createPoolButton}
+
       <YourPosition pool={pool} />
     </>
   );
@@ -296,7 +299,9 @@ export const YourPosition = (props: { pool?: PoolInfo }) => {
             </div>
           </div>
           <div className="pool-card-cell">
-            <h3 style={{ margin: 0 }}>{formatPriceNumber.format(ratio * enriched.supply)}</h3>
+            <h3 style={{ margin: 0 }}>
+              {formatPriceNumber.format(ratio * enriched.supply)}
+            </h3>
           </div>
         </div>
         <div className="pool-card-row" style={{ margin: 0 }}>
@@ -320,5 +325,36 @@ export const YourPosition = (props: { pool?: PoolInfo }) => {
         </div>
       </div>
     </Card>
+  );
+};
+
+export const AddToLiquidityView = () => {
+  return (
+    <>
+      <AppBar
+        right={
+          <Popover
+            placement="topRight"
+            title="Settings"
+            content={<Settings />}
+            trigger="click"
+          >
+            <Button
+              shape="circle"
+              size="large"
+              type="text"
+              icon={<SettingOutlined />}
+            />
+          </Popover>
+        }
+      />
+      <Card
+        className="exchange-card"
+        headStyle={{ padding: 0 }}
+        bodyStyle={{ position: "relative" }}
+      >
+        <AddToLiquidity />
+      </Card>
+    </>
   );
 };
