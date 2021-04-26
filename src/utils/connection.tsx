@@ -3,6 +3,7 @@ import {
   Account,
   clusterApiUrl,
   Connection,
+  PublicKey,
   Transaction,
   TransactionInstruction,
 } from "@solana/web3.js";
@@ -15,6 +16,7 @@ import {
   ENV as ChainID,
   TokenInfo,
 } from "@solana/spl-token-registry";
+import { cache, getMultipleAccounts } from "./accounts";
 
 export type ENV = "mainnet-beta" | "testnet" | "devnet" | "localnet";
 
@@ -94,7 +96,8 @@ export function ConnectionProvider({ children = undefined as any }) {
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [tokenMap, setTokenMap] = useState<Map<string, TokenInfo>>(new Map());
   useEffect(() => {
-    new TokenListProvider().resolve().then((res) => {
+    (async () => {
+      const res = await new TokenListProvider().resolve();
       const list = res
         .filterByChainId(chain.chainID)
         .excludeByTag("nft")
@@ -104,10 +107,25 @@ export function ConnectionProvider({ children = undefined as any }) {
         return map;
       }, new Map<string, TokenInfo>());
 
+      const accounts = await getMultipleAccounts(connection, [...knownMints.keys()], 'single');
+      accounts.keys.forEach((key, index) => {
+        const account = accounts.array[index];
+        if(!account) {
+          knownMints.delete(accounts.keys[index]);
+          return;
+        }
+
+        try {
+          cache.addMint(new PublicKey(key), account);
+        } catch {
+          // ignore
+        }
+      });
+
       setTokenMap(knownMints);
-      setTokens(list);
-    });
-  }, [chain]);
+      setTokens([...knownMints.values()]);
+    })();
+  }, [chain, connection]);
 
   setProgramIds(env);
 

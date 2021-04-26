@@ -72,7 +72,7 @@ export function MarketProvider({ children = null as any }) {
 
       const marketAddress = MINT_TO_MARKET[mintAddress];
       const marketName = `${SERUM_TOKEN?.name}/USDC`;
-      const marketInfo = MARKETS.find(
+      const marketInfo = MARKETS.filter(m => !m.deprecated).find(
         (m) => m.name === marketName || m.address.toBase58() === marketAddress
       );
 
@@ -143,7 +143,7 @@ export function MarketProvider({ children = null as any }) {
         return array.map((item, index) => {
           const marketAddress = keys[index];
           const mintAddress = reverseSerumMarketCache.get(marketAddress);
-          if (mintAddress) {
+          if (mintAddress  && item) {
             const market = marketByMint.get(mintAddress);
 
             if (market) {
@@ -313,7 +313,7 @@ export const useEnrichedPools = (pools: PoolInfo[]) => {
   const dailyVolume = context?.dailyVolume;
 
   useEffect(() => {
-    if (!marketEmitter || !subscribeToMarket) {
+    if (!marketEmitter || !subscribeToMarket || !marketsByMint) {
       return;
     }
 
@@ -376,7 +376,7 @@ function createEnrichedPools(
 
       const account0 = cache.getAccount(p.pubkeys.holdingAccounts[0]);
       const account1 = cache.getAccount(p.pubkeys.holdingAccounts[1]);
-
+      
       const accountA =
         account0?.info.mint.toBase58() === mints[0] ? account0 : account1;
       const accountB =
@@ -607,9 +607,13 @@ const refreshAccounts = async (connection: Connection, keys: string[]) => {
   return getMultipleAccounts(connection, keys, "single").then(
     ({ keys, array }) => {
       return array.map((item, index) => {
+        if (!item) {
+          return undefined;
+        }
+
         const address = keys[index];
         return cache.add(new PublicKey(address), item);
-      });
+      }).filter(a => !!a);
     }
   );
 };
